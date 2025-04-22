@@ -1,65 +1,38 @@
 import ccxt
 import pandas as pd
+import ta
 
-def fetch_ohlcv(symbol, timeframe):
+def fetch_ohlcv(symbol="HOT/USDT", interval="1h", limit=100):
     exchange = ccxt.binance()
-    bars = exchange.fetch_ohlcv(f"{symbol}/USDT", timeframe, limit=100)
-    df = pd.DataFrame(bars, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=interval, limit=limit)
+    df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
     return df
-
-def calculate_indicators(df):
-    df["ema20"] = df["close"].ewm(span=20).mean()
-    df["ema50"] = df["close"].ewm(span=50).mean()
-
-    delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0).rolling(window=14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(window=14).mean()
-    rs = gain / loss
-    df["rsi"] = 100 - (100 / (1 + rs))
-
-    median = (df["high"] + df["low"]) / 2
-    df["ao"] = median.rolling(window=5).mean() - median.rolling(window=34).mean()
-
-    rsi = df["rsi"]
-    df["stochrsi"] = ((rsi - rsi.rolling(14).min()) / (rsi.rolling(14).max() - rsi.rolling(14).min())).fillna(0)
-
-    return df
-
-def generate_signal(row):
-    if row["stochrsi"] > 0.8 and row["ao"] < 0:
-        return "SAT"
-    elif row["stochrsi"] < 0.2 and row["ao"] > 0:
-        return "AL"
-    else:
-        return "BEKLE"
 
 def analyze_coin(symbol):
-    timeframes = ["15m", "1h", "4h"]
-    results = {}
-    try:
-        price = ccxt.binance().fetch_ticker(f"{symbol}/USDT")["last"]
-    except:
-        return {"symbol": symbol, "price": "Fiyat alınamadı", "results": {}}
+    df = fetch_ohlcv(symbol)
 
-    for tf in timeframes:
-        try:
-            df = fetch_ohlcv(symbol, tf)
-            df = calculate_indicators(df)
-            last = df.iloc[-1]
-            signal = generate_signal(last)
+    # MACD hesapla
+    macd = ta.trend.macd_diff(df["close"])
+    df["macd"] = macd
 
-            results[tf] = {
-                "rsi": round(last["rsi"], 2),
-                "ao": round(last["ao"], 4),
-                "stochrsi": round(last["stochrsi"], 4),
-                "ema20": round(last["ema20"], 4),
-                "ema50": round(last["ema50"], 4),
-                "signal": signal
-            }
-        except:
-            results[tf] = {
-                "rsi": "HATA", "ao": "HATA", "stochrsi": "HATA",
-                "ema20": "HATA", "ema50": "HATA", "signal": "YOK"
-            }
+    # ATR hesapla (14 periyotluk)
+    atr = ta.volatility.AverageTrueRange(high=df["high"], low=df["low"], close=df["close"], window=14).average_true_range()
+    df["atr"] = atr
 
-    return {"symbol": symbol, "price": price, "results": results}
+    # TP ve SL hesapla (örnek: son fiyat ± 2 * ATR)
+    last_price = df["close"].iloc[-1]
+    last_atr = df["atr"].iloc[-1]
+    tp = round(last_price + 2 * last_atr, 6)
+    sl = round(last_price - 2 * last_atr, 6)
+
+    # MACD sinyali
+    macd_signal = "AL" if df["macd"].iloc[-1] > 0 else "SAT"
+
+    return {
+        "price": round(last_price, 6),
+        "tp": tp,
+        "sl": sl,
+        "macd": round(df["macd"].iloc[-1], 6),
+        "macd_signal": macd_signal
+    }
