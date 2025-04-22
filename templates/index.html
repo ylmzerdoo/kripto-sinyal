@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kripto Sinyal Oluşturucu</title>
+  <style>
+    body {
+      background: #111;
+      color: #eee;
+      font-family: sans-serif;
+      padding: 20px;
+      margin: 0;
+      text-align: center;
+    }
+
+    input, button {
+      padding: 10px;
+      font-size: 16px;
+      margin: 10px 5px;
+      border-radius: 8px;
+      border: none;
+      width: 80%;
+      max-width: 300px;
+    }
+
+    .trend-box {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: bold;
+      display: inline-block;
+      margin: 10px;
+    }
+
+    .buy { background: #00c853; color: white; }
+    .sell { background: #d50000; color: white; }
+    .bekle { background: #ffab00; color: white; }
+
+    table {
+      margin: 20px auto;
+      width: 95%;
+      border-collapse: collapse;
+      overflow-x: auto;
+    }
+
+    th, td {
+      border: 1px solid #333;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 20px; }
+      th, td { font-size: 12px; }
+      .trend-box { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>📈 Kripto Sinyal Oluşturucu</h1>
+  <form method="POST">
+    <input type="text" name="symbol" placeholder="örn: HOT" required>
+    <button type="submit">Sinyal Oluştur</button>
+  </form>
+
+  {% if coin %}
+    <h2>{{ coin }}/USDT</h2>
+    <p id="price">Fiyat: {{ price }}</p>
+
+    {% if overall_trend == "AL" %}
+      <div class="trend-box buy">Genel Trend: AL</div>
+    {% elif overall_trend == "SAT" %}
+      <div class="trend-box sell">Genel Trend: SAT</div>
+    {% else %}
+      <div class="trend-box bekle">Genel Trend: BEKLE</div>
+    {% endif %}
+
+    <p>
+      🎯 TP: <span style="color:lime">{{ tp }}</span>
+      {% if profit %} | 💰 Kâr: {{ profit }} TL {% endif %}
+    </p>
+    <p>
+      🔻 SL: <span style="color:red">{{ sl }}</span>
+      {% if loss %} | 💸 Zarar: {{ loss }} TL {% endif %}
+    </p>
+    <p>⚙️ Önerilen Kaldıraç: {{ leverage }}x</p>
+
+    <table>
+      <tr><th>Zaman</th><th>RSI</th><th>AO</th><th>StochRSI</th><th>EMA20</th><th>EMA50</th><th>Sinyal</th></tr>
+      {% for tf, r in signal_data.results.items() %}
+      <tr>
+        <td>{{ tf }}</td>
+        <td>{{ r.rsi }}</td>
+        <td>{{ r.ao }}</td>
+        <td>{{ r.stochrsi }}</td>
+        <td>{{ r.ema20 }}</td>
+        <td>{{ r.ema50 }}</td>
+        <td>{{ r.signal }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+
+  <script>
+    const coin = "{{ coin }}";
+    function updatePrice() {
+      if (coin) {
+        fetch("https://api.binance.com/api/v3/ticker/price?symbol=" + coin + "USDT")
+          .then(res => res.json())
+          .then(data => {
+            const formatted = parseFloat(data.price).toFixed(6);
+            document.getElementById("price").innerText = "Fiyat: " + formatted;
+          })
+          .catch(() => {
+            document.getElementById("price").innerText = "Fiyat alınamadı";
+          });
+      }
+    }
+
+    setInterval(updatePrice, 5000); // 5 saniyede bir fiyat güncelle
+  </script>
+</body>
+</html>
